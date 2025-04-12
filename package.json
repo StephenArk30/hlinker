@@ -1,0 +1,64 @@
+{
+  "name": "hlinker",
+  "version": "0.0.1",
+  "main": "dist/hlinker.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "hlinker": "./dist/hlinker.js"
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "npm run clean && rollup -c",
+    "prepublishOnly": "npm run build",
+    "prepare": "husky",
+    "lint:lint-staged": "lint-staged"
+  },
+  "keywords": [
+    "pnpm",
+    "link"
+  ],
+  "author": "stephenark30",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StephenArk30/hlinker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/StephenArk30/hlinker/issues"
+  },
+  "homepage": "https://github.com/StephenArk30/hlinker#readme",
+  "description": "",
+  "devDependencies": {
+    "@eslint/js": "^9.24.0",
+    "@rollup/plugin-commonjs": "^28.0.3",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "@rollup/plugin-typescript": "^12.1.2",
+    "@types/node": "^22.14.0",
+    "@typescript-eslint/eslint-plugin": "^8.29.0",
+    "@typescript-eslint/parser": "^8.29.0",
+    "eslint": "^9.24.0",
+    "globals": "^16.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.1",
+    "rimraf": "^6.0.1",
+    "rollup": "^4.39.0",
+    "tslib": "^2.8.1",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.29.0"
+  },
+  "dependencies": {
+    "@pnpm/fs.hard-link-dir": "^1000.0.0",
+    "@pnpm/list": "^1000.0.13"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=10"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "git add"
+    ]
+  }
+}
