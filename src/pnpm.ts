@@ -28,7 +28,6 @@ async function getPackagePath(packageName: string, outputDir: string) {
   const [root] = await searchForPackages([packageName], [path.resolve()], {
     depth: Infinity,
     lockfileDir: path.resolve(),
-    virtualStoreDirMaxLength: 120,
   });
   const packageDir = findDepPath(packageName, root);
   if (!packageDir) {

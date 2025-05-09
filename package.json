@@ -48,12 +48,12 @@
     "typescript-eslint": "^8.29.0"
   },
   "dependencies": {
-    "@pnpm/fs.hard-link-dir": "^1000.0.0",
-    "@pnpm/list": "^1000.0.13"
+    "@pnpm/fs.hard-link-dir": "^2.0.0",
+    "@pnpm/list": "^9.0.0"
   },
   "engines": {
-    "node": ">=18",
-    "pnpm": ">=10"
+    "node": ">=16",
+    "pnpm": ">=8 <9"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [
