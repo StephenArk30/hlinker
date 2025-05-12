@@ -2,7 +2,12 @@ translated by deepseek from [Chinese ver](./README.zh_CN.md)
 
 # HLinker
 
-⚠️ Currently only supports node@>=18 + pnpm@>=10
+Version Support Status:
+
+| hlinker version | Node version | pnpm version |
+|-----------------|--------------|--------------|
+| v8.x            | \>=16        | v8.x         |
+| v10.x           | \>=18        | v10.x        |
 
 > Link local packages using hard links
 
