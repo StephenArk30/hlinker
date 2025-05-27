@@ -29,9 +29,16 @@ pnpm link antd
 ```shell
 pnpm add -D hlinker
 # 建立硬链接
-hlinker link <package> <local-path>:<output-dir>
+hlinker link <package> <local-path>:<output-dir> [--save]
+# 或直接从 .hlinker.json 读取链接配置
+hlinker link
+# 只 link 某个包，从 .hlinker.json 读取
+hlinker link <package>
 # 取消链接
-hlinker unlink <package> <output-dir>
+hlinker unlink <package> <output-dir> [--save]
+
+# 推荐使用 npx 来节省时间
+npx hlinker@10 [args]
 ```
 
 `<output-dir>` 是产物文件夹。例如打包后产物如果是 hlinker/dist，那么 `<output-dir>` 就是 `dist`。
@@ -45,6 +52,8 @@ ln /path/to/abc/dist/** ./node_modules/.pnpm/abc@1.2.3/node_modules/abc/dist/**
 之所以不是直接硬链接 abc，是因为这样比较好做备份。在硬链接之前会备份好 `node_modules/.../abc/dist` 到 `node_modules/.../abc/dist_bak`，在 unlink 时会把备份的文件夹还原回来。
 
 如果执意要直接硬链接 abc，`<output-dir>` 直接传 `.` 也是可以的。
+
+可选传入 --save 来将 link 保存到当前目录的 .hlinker.json。保存后，可以直接使用 `hlinker link` 来恢复所有保存的链接。
 
 ## 注意事项
 
