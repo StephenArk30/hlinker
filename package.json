@@ -50,7 +50,8 @@
   },
   "dependencies": {
     "@pnpm/fs.hard-link-dir": "^2.0.0",
-    "@pnpm/list": "^9.0.0"
+    "@pnpm/list": "^9.0.0",
+    "chalk": "^4.1.2"
   },
   "engines": {
     "node": ">=16",

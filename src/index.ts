@@ -1,7 +1,8 @@
 import { linkPackage, unlinkPackage } from './pnpm';
 import fs from 'fs';
 import path from 'path';
-import { confirm, HLinkExistError, readFile, readJSON, writeJSON } from './utils';
+import { confirm, HLinkExistError, notImportant, readFile, readJSON, writeJSON } from './utils';
+import chalk from 'chalk';
 
 declare const __VERSION__: string;
 
@@ -34,15 +35,15 @@ async function checkPostInstall(project: string) {
         writeJSON(pkgJsonPath, packageJson);
       }
     } else {
-      console.error(`postinstall hook already exists in package.json. Please manually add "&& npx hlinker@${__VERSION__} link" to the existing command.`);
+      console.log(chalk.yellow(`postinstall hook already exists in package.json. Please manually add "&& npx hlinker@${__VERSION__} link" to the existing command.`));
     }
   }
 }
 
 function showUsageAndExit() {
-  console.error('Usage:');
-  console.error('  hlinker link <package> <local-path>:<output-dir> [--save] [--project <project-path>]');
-  console.error('  hlinker unlink <package> <output-dir> [--save] [--project <project-path>]');
+  console.log('Usage:');
+  console.log('  hlinker link <package> <local-path>:<output-dir> [--save] [--project <project-path>]');
+  console.log('  hlinker unlink <package> <output-dir> [--save] [--project <project-path>]');
   process.exit(1);
 }
 
@@ -78,9 +79,11 @@ async function link(packageName: string | undefined, pathSpec: string | undefine
     await linkPackage(packageName, localPath, outputDir, projectRoot);
   } catch (e) {
     if (e instanceof HLinkExistError) {
-      if (!(await confirm(`path already exists:\n${e.dirs.join('\n')}\nLink already exists for package: ${packageName}. Do you want to overwrite it?`))) {
+      e.print();
+      if (!(await confirm(`Link already exists for package: ${packageName}. Do you want to overwrite it?`))) {
         process.exit(0);
       }
+      console.log(notImportant('Forcing link'));
       await linkPackage(packageName, localPath, outputDir, projectRoot, true);
     } else {
       throw e;

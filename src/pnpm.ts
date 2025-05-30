@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { PackageDependencyHierarchy, searchForPackages } from '@pnpm/list';
-import { hardLinkDir } from './utils';
+import { commandText, hardLinkDir, notImportant, pathText } from './utils';
 
 type IDepKey = 'dependencies' | 'devDependencies' | 'optionalDependencies' | 'unsavedDependencies';
 const DEP_KEYS: IDepKey[] = [
@@ -55,15 +55,14 @@ export async function linkPackage(packageName: string, localPath: string, output
   // 1. Backup original directory
   if (fs.existsSync(outputPath)) {
     if (!fs.existsSync(backupPath)) {
-      console.log(`mv ${outputDir} ${outputDir}_bak`);
+      console.log(commandText('mv'), pathText(outputDir), pathText(`${outputDir}_bak`));
       fs.renameSync(outputPath, backupPath);
     } else {
-      console.log(`Backup ${outputDir}_bak already exists, skipping backup`);
+      console.log(notImportant(`${outputDir}_bak already exists, skipping backup`));
     }
   }
 
   // 2. Create hard links (recursively process directory structure)
-  console.log(`ln ${localOutputPath} ${outputPath}`);
   await hardLinkDir(localOutputPath, [outputPath], force);
 }
 
@@ -72,15 +71,15 @@ export async function unlinkPackage(packageName: string, outputDir: string, proj
 
   // 1. Remove linked directory
   if (fs.existsSync(outputPath)) {
-    console.log(`rm -rf ${outputPath}`);
+    console.log(commandText('rm'), '-rf', pathText(outputPath));
     fs.rmSync(outputPath, { recursive: true, force: true });
   }
 
   // 2. Restore backup
   if (fs.existsSync(backupPath)) {
-    console.log(`mv ${backupPath} ${outputDir}`);
+    console.log(commandText('mv'), pathText(backupPath), pathText(outputDir));
     fs.renameSync(backupPath, outputPath);
   } else {
-    console.log(`No backup found at ${backupPath}, skipping restore`);
+    console.log(notImportant(`No backup found at ${backupPath}, skipping restore`));
   }
 }

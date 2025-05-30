@@ -11,6 +11,9 @@ dependencies:
   '@pnpm/list':
     specifier: ^9.0.0
     version: 9.1.12(@pnpm/logger@5.2.0)
+  chalk:
+    specifier: ^4.1.2
+    version: 4.1.2
 
 devDependencies:
   '@eslint/js':
