@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { PackageDependencyHierarchy, searchForPackages } from '@pnpm/list';
-import { hardLinkDir } from '@pnpm/fs.hard-link-dir';
+import { hardLinkDir } from './utils';
 
 type IDepKey = 'dependencies' | 'devDependencies' | 'optionalDependencies' | 'unsavedDependencies';
 const DEP_KEYS: IDepKey[] = [
@@ -24,10 +24,10 @@ function findDepPath(packageName: string, hierarchy: PackageDependencyHierarchy)
   }
 }
 
-async function getPackagePath(packageName: string, outputDir: string) {
-  const [root] = await searchForPackages([packageName], [path.resolve()], {
+async function getPackagePath(packageName: string, outputDir: string, projectRoot?: string) {
+  const [root] = await searchForPackages([packageName], [projectRoot || path.resolve()], {
     depth: Infinity,
-    lockfileDir: path.resolve(),
+    lockfileDir: projectRoot || path.resolve(),
   });
   const packageDir = findDepPath(packageName, root);
   if (!packageDir) {
@@ -44,8 +44,8 @@ async function getPackagePath(packageName: string, outputDir: string) {
   }
 }
 
-export async function linkPackage(packageName: string, localPath: string, outputDir: string) {
-  const { outputPath, backupPath } = await getPackagePath(packageName, outputDir);
+export async function linkPackage(packageName: string, localPath: string, outputDir: string, projectRoot?: string, force = false) {
+  const { outputPath, backupPath } = await getPackagePath(packageName, outputDir, projectRoot);
   const localOutputPath = path.resolve(process.cwd(), localPath, outputDir);
 
   if (!fs.existsSync(localOutputPath)) {
@@ -64,11 +64,11 @@ export async function linkPackage(packageName: string, localPath: string, output
 
   // 2. Create hard links (recursively process directory structure)
   console.log(`ln ${localOutputPath} ${outputPath}`);
-  hardLinkDir(localOutputPath, [outputPath]);
+  await hardLinkDir(localOutputPath, [outputPath], force);
 }
 
-export async function unlinkPackage(packageName: string, outputDir: string) {
-  const { outputPath, backupPath } = await getPackagePath(packageName, outputDir);
+export async function unlinkPackage(packageName: string, outputDir: string, projectRoot?: string) {
+  const { outputPath, backupPath } = await getPackagePath(packageName, outputDir, projectRoot);
 
   // 1. Remove linked directory
   if (fs.existsSync(outputPath)) {

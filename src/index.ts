@@ -1,34 +1,37 @@
 import { linkPackage, unlinkPackage } from './pnpm';
 import fs from 'fs';
-import { confirm, readFile, readJSON, writeJSON } from './utils';
+import path from 'path';
+import { confirm, HLinkExistError, readFile, readJSON, writeJSON } from './utils';
 
 declare const __VERSION__: string;
 
+const LOCAL_CONFIG_FILE = '.hlinker.json';
+
 // check if .hlinker.json is in .gitignore
-async function checkGitIgnore() {
-  if (fs.existsSync('.gitignore')) {
-    const gitignoreContent = readFile('.gitignore');
-    if (!gitignoreContent.includes('.hlinker.json')) {
-      const addToGitignore = await confirm('Do you want to add .hlinker.json to .gitignore?');
-      if (addToGitignore) {
-        fs.appendFileSync('.gitignore', '\n.hlinker.json');
+async function checkGitIgnore(project: string) {
+  const gitIgnorePath = path.resolve(project, '.gitignore');
+  if (fs.existsSync(gitIgnorePath)) {
+    const gitignoreContent = readFile(gitIgnorePath);
+    if (!gitignoreContent.includes(LOCAL_CONFIG_FILE)) {
+      if (await confirm(`Do you want to add ${LOCAL_CONFIG_FILE} to .gitignore?`)) {
+        fs.appendFileSync(gitIgnorePath, `\n${LOCAL_CONFIG_FILE}`);
       }
     }
   }
 }
 
 // check if package.json exists and add postinstall hook
-async function checkPostInstall() {
-  if (fs.existsSync('package.json')) {
-    const packageJson = readJSON('package.json');
+async function checkPostInstall(project: string) {
+  const pkgJsonPath = path.resolve(project, 'package.json');
+  if (fs.existsSync(pkgJsonPath)) {
+    const packageJson = readJSON(pkgJsonPath);
     if (!packageJson.scripts) {
       packageJson.scripts = {};
     }
     if (!packageJson.scripts.postinstall) {
-      const addPostinstall = await confirm(`Do you want to add "npx hlinker@${__VERSION__} link" to postinstall hook in package.json?`);
-      if (addPostinstall) {
+      if (await confirm(`Do you want to add "npx hlinker@${__VERSION__} link" to postinstall hook in package.json?`)) {
         packageJson.scripts.postinstall = `npx hlinker@${__VERSION__} link`;
-        writeJSON('package.json', packageJson);
+        writeJSON(pkgJsonPath, packageJson);
       }
     } else {
       console.error(`postinstall hook already exists in package.json. Please manually add "&& npx hlinker@${__VERSION__} link" to the existing command.`);
@@ -38,19 +41,21 @@ async function checkPostInstall() {
 
 function showUsageAndExit() {
   console.error('Usage:');
-  console.error('  hlinker link <package> <local-path>:<output-dir> [--save]');
-  console.error('  hlinker unlink <package> <output-dir> [--save]');
+  console.error('  hlinker link <package> <local-path>:<output-dir> [--save] [--project <project-path>]');
+  console.error('  hlinker unlink <package> <output-dir> [--save] [--project <project-path>]');
   process.exit(1);
 }
 
-async function link(packageName: string | undefined, pathSpec: string | undefined, hasSaveFlag: boolean) {
+async function link(packageName: string | undefined, pathSpec: string | undefined, hasSaveFlag: boolean, projectRoot: string) {
+  const configPath = path.resolve(projectRoot, LOCAL_CONFIG_FILE);
+
   if (!pathSpec) {
     // read from .hlinker.json
-    const config = readJSON('.hlinker.json');
+    const config = readJSON(configPath);
     // 1. read and link all
     if (!packageName) {
       await Promise.all(Object.keys(config).map((pkgName) => {
-        return link(pkgName, config[pkgName], hasSaveFlag);
+        return link(pkgName, config[pkgName], hasSaveFlag, projectRoot);
       }));
       return;
     }
@@ -59,7 +64,7 @@ async function link(packageName: string | undefined, pathSpec: string | undefine
     if (!savedPath) {
       throw new Error(`No saved path found for package: ${packageName}`);
     }
-    await link(packageName, savedPath, hasSaveFlag);
+    await link(packageName, savedPath, hasSaveFlag, projectRoot);
     return;
   }
   if (!packageName) {
@@ -68,32 +73,47 @@ async function link(packageName: string | undefined, pathSpec: string | undefine
   }
   // 3. link one
   const [localPath, outputDir = 'dist'] = pathSpec.split(':');
-  await linkPackage(packageName, localPath, outputDir);
+
+  try {
+    await linkPackage(packageName, localPath, outputDir, projectRoot);
+  } catch (e) {
+    if (e instanceof HLinkExistError) {
+      if (!(await confirm(`path already exists:\n${e.dirs.join('\n')}\nLink already exists for package: ${packageName}. Do you want to overwrite it?`))) {
+        process.exit(0);
+      }
+      await linkPackage(packageName, localPath, outputDir, projectRoot, true);
+    } else {
+      throw e;
+    }
+  }
+
   if (hasSaveFlag) {
     // save to .hlinker.json
-    if (!fs.existsSync('.hlinker.json')){
-      if (!(await confirm('No .hlinker.json found. Do you want to create one?'))) {
+    if (!fs.existsSync(configPath)){
+      if (!(await confirm(`No ${configPath} found. Do you want to create one?`))) {
         return;
       }
     }
-    const config = fs.existsSync('.hlinker.json') ? readJSON('.hlinker.json') : {};
+    const config = fs.existsSync(configPath) ? readJSON(configPath) : {};
     config[packageName] = pathSpec;
-    writeJSON('.hlinker.json', config);
+    writeJSON(configPath, config);
 
-    await checkGitIgnore();
-    await checkPostInstall();
+    await checkGitIgnore(projectRoot);
+    await checkPostInstall(projectRoot);
   }
 }
 
-async function unlink(packageName: string | undefined, outputDir: string | undefined, hasSaveFlag: boolean) {
+async function unlink(packageName: string | undefined, outputDir: string | undefined, hasSaveFlag: boolean, projectRoot: string) {
+  const configPath = path.resolve(projectRoot, LOCAL_CONFIG_FILE);
+
   if (!outputDir) {
     // read from .hlinker.json
-    const config = readJSON('.hlinker.json');
+    const config = readJSON(configPath);
     // 1. read and unlink all
     if (!packageName) {
       await Promise.all(Object.keys(config).map((pkgName) => {
         const outDir = config[pkgName].split(':')[1] || 'dist';
-        return unlink(pkgName, outDir, hasSaveFlag);
+        return unlink(pkgName, outDir, hasSaveFlag, projectRoot);
       }));
       return;
     }
@@ -102,7 +122,7 @@ async function unlink(packageName: string | undefined, outputDir: string | undef
     if (!savedPath) {
       throw new Error(`No saved path found for package: ${packageName}`);
     }
-    await unlink(packageName, savedPath, hasSaveFlag);
+    await unlink(packageName, savedPath, hasSaveFlag, projectRoot);
     return;
   }
   if (!packageName) {
@@ -110,34 +130,43 @@ async function unlink(packageName: string | undefined, outputDir: string | undef
     return;
   }
   // 3. unlink one
-  await unlinkPackage(packageName, outputDir);
+  await unlinkPackage(packageName, outputDir, projectRoot);
   if (hasSaveFlag) {
     // remove from .hlinker.json
-    if (fs.existsSync('.hlinker.json')) {
-      const config = readJSON('.hlinker.json');
+    if (fs.existsSync(configPath)) {
+      const config = readJSON(configPath);
       delete config[packageName];
-      writeJSON('.hlinker.json', config);
+      writeJSON(configPath, config);
     }
   }
 }
 
 async function main() {
-  const args = process.argv.slice(2);
+  let args = process.argv.slice(2);
+
   const saveFlagIndex = args.indexOf('--save');
   const hasSaveFlag = saveFlagIndex !== -1;
-  const filteredArgs = hasSaveFlag ? args.filter((_, i) => i !== saveFlagIndex) : args;
-  const [action, packageName, pathSpec] = filteredArgs;
+  args = args.filter((_, i) => i !== saveFlagIndex);
+
+  const projectRootIndex = args.indexOf('-P');
+  const projectRoot = projectRootIndex !== -1 ? args[projectRootIndex + 1] : path.resolve();
+  if (!projectRoot) {
+    showUsageAndExit();
+  }
+  args = args.filter((_, i) => i !== projectRootIndex && i !== projectRootIndex + 1);
+
+  const [action, packageName, pathSpec] = args;
 
   switch (action) {
   case 'link':
-    await link(packageName, pathSpec, hasSaveFlag);
+    await link(packageName, pathSpec, hasSaveFlag, projectRoot);
     break;
   case 'unlink':
-    await unlink(packageName, pathSpec, hasSaveFlag);
+    await unlink(packageName, pathSpec, hasSaveFlag, projectRoot);
     break;
   case 'relink':
-    await unlink(packageName, pathSpec, hasSaveFlag);
-    await link(packageName, pathSpec, hasSaveFlag);
+    await unlink(packageName, pathSpec, hasSaveFlag, projectRoot);
+    await link(packageName, pathSpec, hasSaveFlag, projectRoot);
     break;
   default:
     showUsageAndExit();
