@@ -135,6 +135,10 @@ async function main() {
   case 'unlink':
     await unlink(packageName, pathSpec, hasSaveFlag);
     break;
+  case 'relink':
+    await unlink(packageName, pathSpec, hasSaveFlag);
+    await link(packageName, pathSpec, hasSaveFlag);
+    break;
   default:
     showUsageAndExit();
   }
