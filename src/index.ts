@@ -25,16 +25,16 @@ async function checkGitIgnore(project: string) {
 async function checkPostInstall(project: string) {
   const pkgJsonPath = path.resolve(project, 'package.json');
   if (fs.existsSync(pkgJsonPath)) {
-    const packageJson = readJSON(pkgJsonPath);
+    const [packageJson, spaces] = readJSON(pkgJsonPath);
     if (!packageJson.scripts) {
       packageJson.scripts = {};
     }
     if (!packageJson.scripts.postinstall) {
       if (await confirm(`Do you want to add "npx hlinker@${__VERSION__} link" to postinstall hook in package.json?`)) {
         packageJson.scripts.postinstall = `npx hlinker@${__VERSION__} link`;
-        writeJSON(pkgJsonPath, packageJson);
+        writeJSON(pkgJsonPath, packageJson, spaces);
       }
-    } else {
+    } else if (!packageJson.scripts.postinstall.includes('hlinker')) {
       console.log(chalk.yellow(`postinstall hook already exists in package.json. Please manually add "&& npx hlinker@${__VERSION__} link" to the existing command.`));
     }
   }
@@ -52,7 +52,7 @@ async function link(packageName: string | undefined, pathSpec: string | undefine
 
   if (!pathSpec) {
     // read from .hlinker.json
-    const config = readJSON(configPath);
+    const [config] = readJSON(configPath);
     // 1. read and link all
     if (!packageName) {
       await Promise.all(Object.keys(config).map((pkgName) => {
@@ -97,7 +97,7 @@ async function link(packageName: string | undefined, pathSpec: string | undefine
         return;
       }
     }
-    const config = fs.existsSync(configPath) ? readJSON(configPath) : {};
+    const config = fs.existsSync(configPath) ? readJSON(configPath)[0] : {};
     config[packageName] = pathSpec;
     writeJSON(configPath, config);
 
@@ -111,7 +111,7 @@ async function unlink(packageName: string | undefined, outputDir: string | undef
 
   if (!outputDir) {
     // read from .hlinker.json
-    const config = readJSON(configPath);
+    const [config] = readJSON(configPath);
     // 1. read and unlink all
     if (!packageName) {
       await Promise.all(Object.keys(config).map((pkgName) => {
@@ -137,7 +137,7 @@ async function unlink(packageName: string | undefined, outputDir: string | undef
   if (hasSaveFlag) {
     // remove from .hlinker.json
     if (fs.existsSync(configPath)) {
-      const config = readJSON(configPath);
+      const [config] = readJSON(configPath);
       delete config[packageName];
       writeJSON(configPath, config);
     }

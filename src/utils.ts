@@ -4,8 +4,13 @@ import { hardLinkDir as pnpmhardLinkDir } from '@pnpm/fs.hard-link-dir';
 import chalk from 'chalk';
 
 export const readFile = (filePath: string) => fs.readFileSync(filePath, 'utf8');
-export const readJSON = (filePath: string) => JSON.parse(readFile(filePath));
-export const writeJSON = (filePath: string, data: object) => fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const readJSON = <T = any>(filePath: string) => {
+  const fileContent = readFile(filePath);
+  const spaces = fileContent.match(/^\s+/m)?.[0]?.length || 2;
+  return [JSON.parse(fileContent) as T, spaces] as [T, number];
+}
+export const writeJSON = (filePath: string, data: object, space = 2) => fs.writeFileSync(filePath, JSON.stringify(data, null, space));
 
 // text utils
 export const pathText = chalk.underline;
