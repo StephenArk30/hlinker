@@ -29,13 +29,13 @@ pnpm link antd
 ```shell
 pnpm add -D hlinker
 # 建立硬链接
-hlinker link <package> <local-path>:<output-dir> [--save]
+hlinker link <package> <local-path>:<output-dir> [--save] [--project <project-path>]
 # 或直接从 .hlinker.json 读取链接配置
 hlinker link
 # 只 link 某个包，从 .hlinker.json 读取
 hlinker link <package>
 # 取消链接
-hlinker unlink <package> <output-dir> [--save]
+hlinker unlink <package> <output-dir> [--save] [--project <project-path>]
 
 # 推荐使用 npx 来节省时间
 npx hlinker@10 [args]
@@ -54,6 +54,14 @@ ln /path/to/abc/dist/** ./node_modules/.pnpm/abc@1.2.3/node_modules/abc/dist/**
 如果执意要直接硬链接 abc，`<output-dir>` 直接传 `.` 也是可以的。
 
 可选传入 --save 来将 link 保存到当前目录的 .hlinker.json。保存后，可以直接使用 `hlinker link` 来恢复所有保存的链接。
+
+可传入 --project 改变 projectRoot，例如在 A 包：
+
+```shell
+hlinker link --project ../B
+```
+
+就会读取 ../B/.hlinker.json，恢复 B 包的硬链接。
 
 ## 注意事项
 

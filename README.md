@@ -39,13 +39,13 @@ hlinker link <package>
 # Remove links
 hlinker unlink <package> <output-dir> [--save]
 
-# Recommended to use npx for saving time
+# Recommended to use npx for convenience
 npx hlinker@10 [args]
 ```
 
-`<output-dir>` is the output directory. For example, if the build output is `hlinker/dist`, then `<output-dir>` would be `dist`.
+`<output-dir>` is the output directory of the package. For example, if the bundled output is `hlinker/dist`, then `<output-dir>` should be `dist`.
 
-hlinker will find the real path of `<package>`, then hard link `<local-path>/<output-dir>` to `<package/real/path>/<output-dir>`. For example:
+Hlinker will find the real path of `<package>` and hard link `<local-path>/<output-dir>` to `<package/real/path>/<output-dir>`. For example:
 
 ```shell
 ln /path/to/abc/dist/** ./node_modules/.pnpm/abc@1.2.3/node_modules/abc/dist/**
@@ -55,7 +55,15 @@ The reason we don't directly hard link the entire package is that it makes backu
 
 If you insist on directly hard linking the package, you can pass `.` as `<output-dir>`.
 
-You can optionally pass `--save` to save the link configuration to `.hlinker.json` in the current directory. Once saved, you can use `hlinker link` to restore all saved links.
+Use `--save` to save the link configuration to `.hlinker.json` in the current directory. Once saved, you can use `hlinker link` to restore all saved links.
+
+Use `--project` to change the project root. For example, in package A:
+
+```shell
+hlinker link --project ../B
+```
+
+This will read `../B/.hlinker.json` and restore the hard links for package B.
 
 ## Notes
 
