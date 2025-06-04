@@ -10,7 +10,8 @@ export const readJSON = <T = any>(filePath: string) => {
   const spaces = fileContent.match(/^\s+/m)?.[0]?.length || 2;
   return [JSON.parse(fileContent) as T, spaces] as [T, number];
 }
-export const writeJSON = (filePath: string, data: object, space = 2) => fs.writeFileSync(filePath, JSON.stringify(data, null, space));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const writeJSON = <T = any>(filePath: string, data: T, space = 2) => fs.writeFileSync(filePath, JSON.stringify(data, null, space));
 
 // text utils
 export const pathText = chalk.underline;

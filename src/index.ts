@@ -40,6 +40,15 @@ async function checkPostInstall(project: string) {
   }
 }
 
+interface IHLinkConfig {
+  packages?: {
+    [key: string]: string;
+  };
+  projects?: {
+    [key: string]: string[] | 'all';
+  }
+}
+
 function showUsageAndExit() {
   console.log('Usage:');
   console.log('  hlinker link <package> <local-path>:<output-dir> [--save] [--project <project-path>]');
@@ -47,29 +56,45 @@ function showUsageAndExit() {
   process.exit(1);
 }
 
+const linkedProject = new Set<string>();
+
+const readConfig = (configPath: string) => {
+  const config: IHLinkConfig = fs.existsSync(configPath) ? readJSON(configPath)[0] : {};
+  const packages = config.packages || {};
+  const projects = config.projects || {};
+  return { packages, projects };
+};
+
 async function link(packageName: string | undefined, pathSpec: string | undefined, hasSaveFlag: boolean, projectRoot: string) {
+  linkedProject.add(projectRoot);
   const configPath = path.resolve(projectRoot, LOCAL_CONFIG_FILE);
 
-  if (!pathSpec) {
-    // read from .hlinker.json
-    const [config] = readJSON(configPath);
-    // 1. read and link all
-    if (!packageName) {
-      await Promise.all(Object.keys(config).map((pkgName) => {
-        return link(pkgName, config[pkgName], hasSaveFlag, projectRoot);
-      }));
-      return;
-    }
+  // 1. read and link all
+  if (!packageName) {
+    const { packages, projects } = readConfig(configPath);
+    await Promise.all(Object.keys(packages).map((pkgName) => {
+      return link(pkgName, packages[pkgName], false, projectRoot);
+    }));
+    await Promise.all(Object.keys(projects).map(async (p) => {
+      const projectPath = path.resolve(projectRoot, p);
+      if (linkedProject.has(projectPath)) {
+        return;
+      }
+      if (projects[p] === 'all') {
+        await link(undefined, undefined, false, projectPath);
+      } else {
+        await Promise.all(projects[p].map((pkgName) => link(pkgName, packages[pkgName], false, projectPath)));
+      }
+    }));
+    return;
+  } else if (!pathSpec) {
     // 2. read and link one
-    const savedPath = config[packageName];
+    const {packages} = readConfig(configPath);
+    const savedPath = packages[packageName];
     if (!savedPath) {
       throw new Error(`No saved path found for package: ${packageName}`);
     }
-    await link(packageName, savedPath, hasSaveFlag, projectRoot);
-    return;
-  }
-  if (!packageName) {
-    showUsageAndExit();
+    await link(packageName, savedPath, false, projectRoot);
     return;
   }
   // 3. link one
@@ -90,46 +115,85 @@ async function link(packageName: string | undefined, pathSpec: string | undefine
     }
   }
 
+  // save to .hlinker.json
   if (hasSaveFlag) {
-    // save to .hlinker.json
     if (!fs.existsSync(configPath)){
       if (!(await confirm(`No ${configPath} found. Do you want to create one?`))) {
         return;
       }
     }
-    const config = fs.existsSync(configPath) ? readJSON(configPath)[0] : {};
-    config[packageName] = pathSpec;
-    writeJSON(configPath, config);
+    const { packages, ...config } = readConfig(configPath);
+    packages[packageName] = pathSpec;
+
+    writeJSON(configPath, { ...config, packages });
 
     await checkGitIgnore(projectRoot);
     await checkPostInstall(projectRoot);
   }
 }
 
+async function linkAndSaveProject(packageName: string | undefined, pathSpec: string | undefined, hasSaveFlag: boolean, projectRoot: string) {
+  await link(packageName, pathSpec, hasSaveFlag, projectRoot);
+
+  // save project config only to current project
+  if (hasSaveFlag) {
+    const configPath = path.resolve(LOCAL_CONFIG_FILE);
+    if (path.relative(projectRoot, configPath).startsWith('..')) {
+      if (!fs.existsSync(configPath)){
+        if (!(await confirm(`No ${configPath} found. Do you want to create one?`))) {
+          return;
+        }
+      }
+      const { projects, ...config } = readConfig(configPath);
+      if (packageName) {
+        if (projects[projectRoot] !== 'all') {
+          projects[projectRoot] = (projects[projectRoot] || []).concat([packageName]);
+        }
+      } else {
+        projects[projectRoot] = 'all';
+      }
+
+      writeJSON(configPath, { ...config, projects });
+
+      await checkGitIgnore('.');
+      await checkPostInstall('.');
+    }
+  }
+}
+
 async function unlink(packageName: string | undefined, outputDir: string | undefined, hasSaveFlag: boolean, projectRoot: string) {
   const configPath = path.resolve(projectRoot, LOCAL_CONFIG_FILE);
 
-  if (!outputDir) {
-    // read from .hlinker.json
-    const [config] = readJSON(configPath);
-    // 1. read and unlink all
-    if (!packageName) {
-      await Promise.all(Object.keys(config).map((pkgName) => {
-        const outDir = config[pkgName].split(':')[1] || 'dist';
-        return unlink(pkgName, outDir, hasSaveFlag, projectRoot);
-      }));
-      return;
-    }
+  // 1. read and unlink all
+  if (!packageName) {
+    const { packages, projects } = readConfig(configPath);
+    await Promise.all(Object.keys(packages).map((pkgName) => {
+      const outDir = packages[pkgName].split(':')[1] || 'dist';
+      return unlink(pkgName, outDir, false, projectRoot);
+    }));
+    await Promise.all(Object.keys(projects).map(async (p) => {
+      const projectPath = path.resolve(projectRoot, p);
+      if (linkedProject.has(projectPath)) {
+        return;
+      }
+      if (projects[p] === 'all') {
+        await unlink(undefined, undefined, false, projectPath);
+      } else {
+        await Promise.all(projects[p].map(async (pkgName) => {
+          const outDir = packages[pkgName].split(':')[1] || 'dist';
+          return unlink(pkgName, outDir, false, projectPath);
+        }));
+      }
+    }));
+    return;
+  } else if (!outputDir) {
     // 2. read and unlink one
-    const savedPath = config[packageName]?.split(':')[1];
+    const { packages } = readConfig(configPath);
+    const savedPath = packages[packageName]?.split(':')[1];
     if (!savedPath) {
       throw new Error(`No saved path found for package: ${packageName}`);
     }
     await unlink(packageName, savedPath, hasSaveFlag, projectRoot);
-    return;
-  }
-  if (!packageName) {
-    showUsageAndExit();
     return;
   }
   // 3. unlink one
@@ -137,9 +201,41 @@ async function unlink(packageName: string | undefined, outputDir: string | undef
   if (hasSaveFlag) {
     // remove from .hlinker.json
     if (fs.existsSync(configPath)) {
-      const [config] = readJSON(configPath);
-      delete config[packageName];
-      writeJSON(configPath, config);
+      const { packages, ...config } = readConfig(configPath);
+      if (packageName) {
+        delete packages[packageName];
+      }
+      writeJSON(configPath, { ...config, packages });
+    }
+  }
+}
+
+async function unlinkAndSaveProject(packageName: string | undefined, outputDir: string | undefined, hasSaveFlag: boolean, projectRoot: string) {
+  await unlink(packageName, outputDir, hasSaveFlag, projectRoot);
+
+  // save project config only to current project
+  if (hasSaveFlag) {
+    const configPath = path.resolve(LOCAL_CONFIG_FILE);
+    if (path.relative(projectRoot, configPath).startsWith('..')) {
+      if (!fs.existsSync(configPath)){
+        return;
+      }
+      const { projects, ...config } = readConfig(configPath);
+      if (packageName) {
+        if (projects[projectRoot] !== 'all') {
+          const index = projects[projectRoot].indexOf(packageName);
+          if (index > -1) {
+            projects[projectRoot].splice(index, 1);
+          }
+        }
+      } else {
+        delete projects[projectRoot];
+      }
+
+      writeJSON(configPath, { ...config, projects });
+
+      await checkGitIgnore('.');
+      await checkPostInstall('.');
     }
   }
 }
@@ -162,14 +258,14 @@ async function main() {
 
   switch (action) {
   case 'link':
-    await link(packageName, pathSpec, hasSaveFlag, projectRoot);
+    await linkAndSaveProject(packageName, pathSpec, hasSaveFlag, projectRoot);
     break;
   case 'unlink':
-    await unlink(packageName, pathSpec, hasSaveFlag, projectRoot);
+    await unlinkAndSaveProject(packageName, pathSpec, hasSaveFlag, projectRoot);
     break;
   case 'relink':
-    await unlink(packageName, pathSpec, hasSaveFlag, projectRoot);
-    await link(packageName, pathSpec, hasSaveFlag, projectRoot);
+    await unlinkAndSaveProject(packageName, pathSpec, hasSaveFlag, projectRoot);
+    await linkAndSaveProject(packageName, pathSpec, hasSaveFlag, projectRoot);
     break;
   default:
     showUsageAndExit();

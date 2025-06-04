@@ -69,3 +69,36 @@ hlinker link --project ../B
 2. 升级包版本并安装后，需要重新链接。 // TODO: postinstall 钩子
 3. 请确保被硬链接的文件不要被删除。例如在打包之前做了 clean 操作等，会导致硬链接失效
 4. 由于 pnpm 的寻包代码每个版本不一样，本工具并不能兼容所有版本，需要针对性安装
+
+## .hlinker.json
+
+存储使用过的链接命令，分为两部分：
+
+- packages: 当前项目下要 link 的包
+- projects: 其他项目下要 link 的包
+
+当使用命令 `hlinker link <package> <local-path>:<output-dir> --save --project <project-path>` 时，会：
+
+1. 将 `<package>: <local-path>:<output-dir>` 保存到 `<project-path>` 的 .hlinker.json packages 字段；
+2. 将 `<package>` 保存到当前目录下的 .hlinker.json projects.<project-path> 数组
+
+恢复时，相当于：
+
+1. 从 packages 读取执行 `hlinker link <package> <local-path>:<output-dir>`
+2. 从 projects 读取执行 `hlinker link <package> --project <project-path>`
+
+格式：
+
+```shell
+{
+  "packages": {
+    "react": "/path/to/local/react:lib"
+  },
+  "projects": {
+    "/path/to/another/project1": [
+      "antd"
+    ],
+    "/path/to/another/project2": "all"
+  }
+}
+```

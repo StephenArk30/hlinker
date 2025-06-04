@@ -71,3 +71,37 @@ This will read `../B/.hlinker.json` and restore the hard links for package B.
 2. After upgrading package versions and reinstalling, you need to relink.
 3. Please ensure linked files aren't deleted. For example, performing clean operations before building will break the hard links.
 4. Due to differences in pnpm's package resolution code across versions, this tool isn't compatible with all versions and needs targeted installation.
+
+## .hlinker.json
+
+Stores used link commands, divided into two parts:
+
+- `packages`: Packages to be linked in the current project
+- `projects`: Packages to be linked in other projects
+
+### Command Behavior
+When executing `hlinker link <package> <local-path>:<output-dir> --save --project <project-path>`:
+
+1. Save `<package>: <local-path>:<output-dir>` to the `packages` field in `<project-path>/.hlinker.json`
+2. Save `<package>` to the `projects.<project-path>` array in the current directory's `.hlinker.json`
+
+### Restoration Logic
+When restoring, it's equivalent to executing:
+
+1. From `packages`, read and execute `hlinker link <package> <local-path>:<output-dir>`
+2. From `projects`, read and execute `hlinker link <package> --project <project-path>`
+
+### Configuration File Format
+```json
+{
+  "packages": {
+    "react": "/path/to/local/react:lib"
+  },
+  "projects": {
+    "/path/to/another/project1": [
+      "antd"
+    ],
+    "/path/to/another/project2": "all"
+  }
+}
+```
