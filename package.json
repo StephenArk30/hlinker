@@ -1,6 +1,6 @@
 {
   "name": "hlinker",
-  "version": "8.0.0-beta.0",
+  "version": "8.0.0-beta.1",
   "main": "dist/hlinker.js",
   "types": "dist/index.d.ts",
   "bin": {
