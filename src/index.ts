@@ -240,19 +240,35 @@ async function unlinkAndSaveProject(packageName: string | undefined, outputDir: 
   }
 }
 
+function filterParams(args: string[], names: string[], paramLen: number, defaultValue: string[]): string[];
+function filterParams(args: string[], names: string[], paramLen?: number): string[] | false;
+function filterParams(args: string[], names: string[], paramLen = 0, defaultValue?: string[]) {
+  for (const name of names) {
+    const index = args.indexOf(name);
+    if (index > -1) {
+      const params = args.slice(index + 1, index + 1 + paramLen);
+      args.splice(index, index + 1 + paramLen); // filter arg
+      return params;
+    }
+  }
+  return defaultValue || false;
+}
+
 async function main() {
-  let args = process.argv.slice(2);
+  const args = process.argv.slice(2);
 
-  const saveFlagIndex = args.indexOf('--save');
-  const hasSaveFlag = saveFlagIndex !== -1;
-  args = args.filter((_, i) => i !== saveFlagIndex);
+  const hasSaveFlag = !!filterParams(args, ['-S', '--save']);
+  const [projectRoot] = filterParams(args, ['-P', '--project'], 1, [path.resolve()]);
 
-  const projectRootIndex = args.indexOf('-P');
-  const projectRoot = projectRootIndex !== -1 ? args[projectRootIndex + 1] : path.resolve();
-  if (!projectRoot) {
+  const hasVersionFlag = !!filterParams(args, ['-v', '--version']);
+  if (hasVersionFlag) {
+    console.log(__VERSION__);
+    process.exit(0);
+  }
+  const hasHelpFlag = !!filterParams(args, ['-h', '--help']);
+  if (hasHelpFlag) {
     showUsageAndExit();
   }
-  args = args.filter((_, i) => i !== projectRootIndex && i !== projectRootIndex + 1);
 
   const [action, packageName, pathSpec] = args;
 
@@ -268,6 +284,9 @@ async function main() {
     await linkAndSaveProject(packageName, pathSpec, hasSaveFlag, projectRoot);
     break;
   default:
+    if (action) {
+      console.log(chalk.yellow('Unknow command:', `"${action}"`));
+    }
     showUsageAndExit();
   }
 }
