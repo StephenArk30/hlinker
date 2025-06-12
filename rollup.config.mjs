@@ -8,7 +8,7 @@ import { readFileSync } from 'fs';
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'));
 
 export default {
-  input: 'src/index.ts',
+  input: 'src/main.ts',
   output: {
     file: 'dist/hlinker.js',
     format: 'cjs',

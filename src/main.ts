@@ -1,7 +1,16 @@
-import { linkPackage, unlinkPackage } from './pnpm';
+import { linkPackage, unlinkPackage } from './link';
 import fs from 'fs';
 import path from 'path';
-import { confirm, HLinkExistError, notImportant, readFile, readJSON, writeJSON } from './utils';
+import {
+  confirm,
+  HLinkExistError,
+  notImportant,
+  readFile,
+  readJSON,
+  writeJSON,
+  showUsageAndExit,
+  extractArgs, context,
+} from './utils';
 import chalk from 'chalk';
 
 declare const __VERSION__: string;
@@ -49,13 +58,6 @@ interface IHLinkConfig {
   }
 }
 
-function showUsageAndExit() {
-  console.log('Usage:');
-  console.log('  hlinker link <package> <local-path>:<output-dir> [--save] [--project <project-path>]');
-  console.log('  hlinker unlink <package> <output-dir> [--save] [--project <project-path>]');
-  process.exit(1);
-}
-
 const linkedProject = new Set<string>();
 
 const readConfig = (configPath: string) => {
@@ -65,27 +67,31 @@ const readConfig = (configPath: string) => {
   return { packages, projects };
 };
 
-async function link(packageName: string | undefined, pathSpec: string | undefined, hasSaveFlag: boolean, projectRoot: string) {
+async function link(packageName: string | undefined, pathSpec: string | undefined, hasSaveFlag: boolean) {
+  const { projectRoot } = context;
+
   linkedProject.add(projectRoot);
   const configPath = path.resolve(projectRoot, LOCAL_CONFIG_FILE);
 
   // 1. read and link all
   if (!packageName) {
     const { packages, projects } = readConfig(configPath);
-    await Promise.all(Object.keys(packages).map((pkgName) => {
-      return link(pkgName, packages[pkgName], false, projectRoot);
-    }));
-    await Promise.all(Object.keys(projects).map(async (p) => {
+    for (const pkgName in packages) {
+      await link(pkgName, packages[pkgName], false);
+    }
+    for (const p in projects) {
       const projectPath = path.resolve(projectRoot, p);
       if (linkedProject.has(projectPath)) {
         return;
       }
       if (projects[p] === 'all') {
-        await link(undefined, undefined, false, projectPath);
+        await link(undefined, undefined, false);
       } else {
-        await Promise.all(projects[p].map((pkgName) => link(pkgName, packages[pkgName], false, projectPath)));
+        for (const pkgName of projects[p]) {
+          await link(pkgName, packages[pkgName], false);
+        }
       }
-    }));
+    }
     return;
   } else if (!pathSpec) {
     // 2. read and link one
@@ -94,14 +100,14 @@ async function link(packageName: string | undefined, pathSpec: string | undefine
     if (!savedPath) {
       throw new Error(`No saved path found for package: ${packageName}`);
     }
-    await link(packageName, savedPath, false, projectRoot);
+    await link(packageName, savedPath, false);
     return;
   }
   // 3. link one
   const [localPath, outputDir = 'dist'] = pathSpec.split(':');
 
   try {
-    await linkPackage(packageName, localPath, outputDir, projectRoot);
+    await linkPackage(packageName, localPath, outputDir);
   } catch (e) {
     if (e instanceof HLinkExistError) {
       e.print();
@@ -109,7 +115,7 @@ async function link(packageName: string | undefined, pathSpec: string | undefine
         process.exit(0);
       }
       console.log(notImportant('Forcing link'));
-      await linkPackage(packageName, localPath, outputDir, projectRoot, true);
+      await linkPackage(packageName, localPath, outputDir, true);
     } else {
       throw e;
     }
@@ -123,7 +129,7 @@ async function link(packageName: string | undefined, pathSpec: string | undefine
       }
     }
     const { packages, ...config } = readConfig(configPath);
-    packages[packageName] = pathSpec;
+    packages[packageName] = `${path.resolve(localPath)}:${outputDir}`;
 
     writeJSON(configPath, { ...config, packages });
 
@@ -132,8 +138,9 @@ async function link(packageName: string | undefined, pathSpec: string | undefine
   }
 }
 
-async function linkAndSaveProject(packageName: string | undefined, pathSpec: string | undefined, hasSaveFlag: boolean, projectRoot: string) {
-  await link(packageName, pathSpec, hasSaveFlag, projectRoot);
+async function linkAndSaveProject(packageName: string | undefined, pathSpec: string | undefined) {
+  const { projectRoot, hasSaveFlag } = context;
+  await link(packageName, pathSpec, hasSaveFlag);
 
   // save project config only to current project
   if (hasSaveFlag) {
@@ -161,30 +168,32 @@ async function linkAndSaveProject(packageName: string | undefined, pathSpec: str
   }
 }
 
-async function unlink(packageName: string | undefined, outputDir: string | undefined, hasSaveFlag: boolean, projectRoot: string) {
+async function unlink(packageName: string | undefined, outputDir: string | undefined, hasSaveFlag: boolean) {
+  const { projectRoot } = context;
+
   const configPath = path.resolve(projectRoot, LOCAL_CONFIG_FILE);
 
   // 1. read and unlink all
   if (!packageName) {
     const { packages, projects } = readConfig(configPath);
-    await Promise.all(Object.keys(packages).map((pkgName) => {
+    for (const pkgName in packages) {
       const outDir = packages[pkgName].split(':')[1] || 'dist';
-      return unlink(pkgName, outDir, false, projectRoot);
-    }));
-    await Promise.all(Object.keys(projects).map(async (p) => {
+      await unlink(pkgName, outDir, false);
+    }
+    for (const p in projects) {
       const projectPath = path.resolve(projectRoot, p);
       if (linkedProject.has(projectPath)) {
         return;
       }
       if (projects[p] === 'all') {
-        await unlink(undefined, undefined, false, projectPath);
+        await unlink(undefined, undefined, false);
       } else {
-        await Promise.all(projects[p].map(async (pkgName) => {
+        for (const pkgName of projects[p]) {
           const outDir = packages[pkgName].split(':')[1] || 'dist';
-          return unlink(pkgName, outDir, false, projectPath);
-        }));
+          await unlink(pkgName, outDir, false);
+        }
       }
-    }));
+    }
     return;
   } else if (!outputDir) {
     // 2. read and unlink one
@@ -193,11 +202,11 @@ async function unlink(packageName: string | undefined, outputDir: string | undef
     if (!savedPath) {
       throw new Error(`No saved path found for package: ${packageName}`);
     }
-    await unlink(packageName, savedPath, hasSaveFlag, projectRoot);
+    await unlink(packageName, savedPath, hasSaveFlag);
     return;
   }
   // 3. unlink one
-  await unlinkPackage(packageName, outputDir, projectRoot);
+  await unlinkPackage(packageName, outputDir);
   if (hasSaveFlag) {
     // remove from .hlinker.json
     if (fs.existsSync(configPath)) {
@@ -210,8 +219,10 @@ async function unlink(packageName: string | undefined, outputDir: string | undef
   }
 }
 
-async function unlinkAndSaveProject(packageName: string | undefined, outputDir: string | undefined, hasSaveFlag: boolean, projectRoot: string) {
-  await unlink(packageName, outputDir, hasSaveFlag, projectRoot);
+async function unlinkAndSaveProject(packageName: string | undefined, outputDir: string | undefined) {
+  const { projectRoot, hasSaveFlag } = context;
+
+  await unlink(packageName, outputDir, hasSaveFlag);
 
   // save project config only to current project
   if (hasSaveFlag) {
@@ -240,48 +251,21 @@ async function unlinkAndSaveProject(packageName: string | undefined, outputDir: 
   }
 }
 
-function filterParams(args: string[], names: string[], paramLen: number, defaultValue: string[]): string[];
-function filterParams(args: string[], names: string[], paramLen?: number): string[] | false;
-function filterParams(args: string[], names: string[], paramLen = 0, defaultValue?: string[]) {
-  for (const name of names) {
-    const index = args.indexOf(name);
-    if (index > -1) {
-      const params = args.slice(index + 1, index + 1 + paramLen);
-      args.splice(index, index + 1 + paramLen); // filter arg
-      return params;
-    }
-  }
-  return defaultValue || false;
-}
-
 async function main() {
   const args = process.argv.slice(2);
-
-  const hasSaveFlag = !!filterParams(args, ['-S', '--save']);
-  const [projectRoot] = filterParams(args, ['-P', '--project'], 1, [path.resolve()]);
-
-  const hasVersionFlag = !!filterParams(args, ['-v', '--version']);
-  if (hasVersionFlag) {
-    console.log(__VERSION__);
-    process.exit(0);
-  }
-  const hasHelpFlag = !!filterParams(args, ['-h', '--help']);
-  if (hasHelpFlag) {
-    showUsageAndExit();
-  }
-
+  extractArgs(args);
   const [action, packageName, pathSpec] = args;
 
   switch (action) {
   case 'link':
-    await linkAndSaveProject(packageName, pathSpec, hasSaveFlag, projectRoot);
+    await linkAndSaveProject(packageName, pathSpec);
     break;
   case 'unlink':
-    await unlinkAndSaveProject(packageName, pathSpec, hasSaveFlag, projectRoot);
+    await unlinkAndSaveProject(packageName, pathSpec);
     break;
   case 'relink':
-    await unlinkAndSaveProject(packageName, pathSpec, hasSaveFlag, projectRoot);
-    await linkAndSaveProject(packageName, pathSpec, hasSaveFlag, projectRoot);
+    await unlinkAndSaveProject(packageName, pathSpec);
+    await linkAndSaveProject(packageName, pathSpec);
     break;
   default:
     if (action) {
